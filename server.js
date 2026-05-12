@@ -14,9 +14,8 @@ dotenv.config();
 
 const app = express();
 
-// logging
-const logStream = fs.createWriteStream(path.join(process.cwd(), "access.log"), { flags: "a" });
-app.use(morgan("combined", { stream: logStream }));
+// logging (container-friendly: stdout)
+app.use(morgan("combined"));
 
 // security and performance
 app.use(helmet());
