@@ -28,6 +28,13 @@ app.use(morgan("combined"));
 app.use(helmet());
 app.use(compression());
 
+/* ---------------- TIMEOUT ---------------- */
+
+app.use((req, res, next) => {
+  res.setTimeout(120000);
+  next();
+});
+
 /* ---------------- CORS ---------------- */
 
 const corsOrigin = process.env.CORS_ORIGIN || "*";
@@ -61,17 +68,20 @@ app.use(cors({
   ]
 }));
 
-app.options("*", cors());
+app.options("*", cors({
+  origin: true
+}));
 
 /* ---------------- JSON ---------------- */
 
 app.use(express.json({
-  limit: "2mb"
+  limit: "1mb"
 }));
 
 /* ---------------- RATE LIMIT ---------------- */
 
 app.use(rateLimit({
+
   windowMs:
     Number(process.env.RATE_LIMIT_WINDOW_MS)
     || 60 * 1000,
@@ -81,8 +91,34 @@ app.use(rateLimit({
     || 60,
 
   standardHeaders: true,
+
   legacyHeaders: false
 }));
+
+/* ---------------- ALLOWED MODELS ---------------- */
+
+const allowedModels = [
+
+  "google/gemini-3-flash-preview",
+  "google/gemini-3.1-pro-preview",
+  "google/gemini-2.5-flash-image",
+  "google/gemini-3-pro-image-preview",
+
+  "openai/gpt-5",
+  "openai/gpt-5.2",
+  "openai/gpt-5.4-mini",
+  "openai/gpt-5.4-nano",
+
+  "anthropic/claude-sonnet-4.6",
+  "anthropic/claude-opus-4.6",
+
+  "deepseek-v4-flash",
+  "deepseek-v4-pro",
+
+  "x-ai/grok-4.1-fast",
+
+  "qwen/qwen3-max-thinking"
+];
 
 /* ---------------- MULTER ---------------- */
 
@@ -96,6 +132,7 @@ const upload = multer({
       !file.mimetype ||
       !file.mimetype.startsWith("image/")
     ) {
+
       return cb(
         new Error("Only image files allowed"),
         false
@@ -106,13 +143,14 @@ const upload = multer({
   },
 
   limits: {
+
     fileSize:
       Number(process.env.UPLOAD_MAX_BYTES)
-      || 5 * 1024 * 1024
+      || 3 * 1024 * 1024
   }
 });
 
-/* ---------------- HEALTH CHECK ---------------- */
+/* ---------------- HEALTH ---------------- */
 
 app.get("/", (req, res) => {
 
@@ -133,10 +171,12 @@ const chatSchema = Joi.object({
   model: Joi.string().optional()
 });
 
-/* ---------------- CHAT ENDPOINT ---------------- */
+/* ---------------- CHAT ---------------- */
 
 app.post(
+
   "/chat",
+
   upload.single("image"),
 
   async (req, res) => {
@@ -144,8 +184,12 @@ app.post(
     try {
 
       const body = {
+
         message: req.body.message,
-        model: req.body.model
+
+        model:
+          req.body.model ||
+          process.env.DEFAULT_MODEL
       };
 
       const { error, value } =
@@ -162,6 +206,18 @@ app.post(
         message,
         model
       } = value;
+
+      /* ---------- MODEL VALIDATION ---------- */
+
+      if (
+        model &&
+        !allowedModels.includes(model)
+      ) {
+
+        return res.status(400).json({
+          error: "invalid_model"
+        });
+      }
 
       let messages;
 
@@ -192,6 +248,7 @@ app.post(
             role: "user",
 
             content: [
+
               {
                 type: "text",
                 text: message
@@ -226,12 +283,11 @@ app.post(
 
       return res.json({
 
-        reply,
+        success: true,
 
-        model:
-          model
-          || process.env.DEFAULT_MODEL
-          || "google/gemini-2.5-flash"
+        model,
+
+        reply
       });
 
     } catch (err) {
