@@ -1,23 +1,21 @@
-FROM node:18-alpine
+FROM node:20-alpine
 
 WORKDIR /usr/src/app
 
-# Run in production
 ENV NODE_ENV=production
-ENV TOKEN_FILE=data/token.json
+ENV PORT=8080
 
-# Install only production deps (keep image small)
+# install production dependencies only
 COPY package.json package-lock.json* ./
-RUN npm install --production --silent --no-audit --no-fund
+RUN npm ci --omit=dev --no-audit --no-fund --prefer-offline
 
-# Copy app
+# copy app
 COPY . .
 
-# Prepare data folder for token persistence
-RUN mkdir -p /usr/src/app/data && chown -R node:node /usr/src/app
-USER node
+# create non-root user and set ownership
+RUN addgroup -S appgroup && adduser -S appuser -G appgroup && chown -R appuser:appgroup /usr/src/app
+USER appuser
 
-EXPOSE 3000
+EXPOSE 8080
 
-# Limit Node memory to avoid OOM on tiny VMs
-CMD ["node", "--max-old-space-size=256", "server.js"]
+CMD ["node", "server.js"]

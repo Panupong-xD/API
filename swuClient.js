@@ -8,39 +8,21 @@ if (!fetchFn) {
   throw new Error("Global fetch is not available. Run on Node 18+ or provide a fetch polyfill.");
 }
 
+/* swuClient.js - stateless (memory-only token cache) */
 const LOGIN_URL = process.env.SWU_LOGIN_URL || "https://swuai.swu.ac.th/api/v1/auths/ldap";
 const CHAT_URL = process.env.SWU_CHAT_URL || "https://swuai.swu.ac.th/api/chat/completions";
-
-const TOKEN_FILE = path.join(__dirname, process.env.TOKEN_FILE || "token.json");
-const TOKEN_EXPIRE = Number(process.env.TOKEN_EXPIRE_MS) || 60 * 60 * 1000; // 1 hour
+const TOKEN_EXPIRE_MS = Number(process.env.TOKEN_EXPIRE_MS) || 60 * 60 * 1000; // 1 hour
 
 let cachedToken = null;
+let cachedTime = 0;
+let loginPromise = null;
 
-function saveToken(token) {
-  try {
-    fs.writeFileSync(TOKEN_FILE, JSON.stringify({ token, time: Date.now() }, null, 2), { mode: 0o600 });
-  } catch (err) {
-    console.warn("Could not save token to disk:", err.message);
-  }
-}
-
-function loadToken() {
-  try {
-    if (!fs.existsSync(TOKEN_FILE)) return null;
-    return JSON.parse(fs.readFileSync(TOKEN_FILE, "utf8"));
-  } catch (err) {
-    console.warn("Could not read token file:", err.message);
-    return null;
-  }
-}
-
-export async function login() {
+async function _doLogin() {
   const user = process.env.SWU_USER;
   const password = process.env.SWU_PASSWORD;
+  if (!user || !password) throw new Error("SWU credentials not set in environment");
 
-  if (!user || !password) throw new Error("SWU credentials not set in environment variables");
-
-  const res = await fetchFn(LOGIN_URL, {
+  const res = await fetch(LOGIN_URL, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ user, password }),
@@ -52,33 +34,51 @@ export async function login() {
     throw new Error(`Login failed (${res.status}) ${text}`);
   }
 
+  // try cookie first
   const cookie = res.headers.get("set-cookie");
-  if (!cookie) throw new Error("No token cookie returned from login");
-
-  const token = cookie.split(";")[0].replace("token=", "");
-
-  cachedToken = token;
-  saveToken(token);
-
-  return token;
-}
-
-export async function getToken() {
-  if (cachedToken) return cachedToken;
-
-  const cached = loadToken();
-  if (cached && Date.now() - cached.time < TOKEN_EXPIRE) {
-    cachedToken = cached.token;
+  if (cookie) {
+    const token = cookie.split(";")[0].replace("token=", "");
+    if (!token) throw new Error("Token cookie malformed");
+    cachedToken = token;
+    cachedTime = Date.now();
     return cachedToken;
   }
 
+  // fallback: some endpoints return JSON { token: '...' }
+  try {
+    const json = await res.json();
+    if (json && json.token) {
+      cachedToken = json.token;
+      cachedTime = Date.now();
+      return cachedToken;
+    }
+  } catch (e) {
+    // ignore
+  }
+
+  throw new Error("No token returned from login");
+}
+
+export async function login() {
+  if (loginPromise) return loginPromise;
+  loginPromise = _doLogin();
+  try {
+    const t = await loginPromise;
+    return t;
+  } finally {
+    loginPromise = null;
+  }
+}
+
+export async function getToken() {
+  if (cachedToken && (Date.now() - cachedTime) < TOKEN_EXPIRE_MS) return cachedToken;
   return await login();
 }
 
 export async function chat(messages, model = process.env.DEFAULT_MODEL || "google/gemini-2.5-flash") {
   const token = await getToken();
 
-  const res = await fetchFn(CHAT_URL, {
+  const res = await fetch(CHAT_URL, {
     method: "POST",
     headers: {
       Authorization: `Bearer ${token}`,
@@ -86,11 +86,12 @@ export async function chat(messages, model = process.env.DEFAULT_MODEL || "googl
       Cookie: `token=${token}`
     },
     body: JSON.stringify({ model, messages }),
-    timeout: 30_000
+    // Cloud Run will manage timeouts; keep client-side reasonable
   });
 
   if (res.status === 401) {
-    cachedToken = null; // force re-login
+    cachedToken = null;
+    cachedTime = 0;
     await login();
     return chat(messages, model);
   }
@@ -100,7 +101,6 @@ export async function chat(messages, model = process.env.DEFAULT_MODEL || "googl
     throw new Error(`Chat request failed (${res.status}) ${text}`);
   }
 
-  const data = await res.json();
-
+  const data = await res.json().catch(() => null);
   return data?.choices?.[0]?.message?.content ?? null;
 }
