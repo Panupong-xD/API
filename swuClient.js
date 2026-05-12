@@ -78,6 +78,10 @@ export async function getToken() {
 export async function chat(messages, model = process.env.DEFAULT_MODEL || "google/gemini-2.5-flash") {
   const token = await getToken();
 
+  const timeoutMs = Number(process.env.API_TIMEOUT_MS) || 60 * 1000;
+  const ac = new AbortController();
+  const tid = setTimeout(() => ac.abort(), timeoutMs);
+
   const res = await fetch(CHAT_URL, {
     method: "POST",
     headers: {
@@ -86,8 +90,8 @@ export async function chat(messages, model = process.env.DEFAULT_MODEL || "googl
       Cookie: `token=${token}`
     },
     body: JSON.stringify({ model, messages }),
-    // Cloud Run will manage timeouts; keep client-side reasonable
-  });
+    signal: ac.signal
+  }).finally(() => clearTimeout(tid));
 
   if (res.status === 401) {
     cachedToken = null;
@@ -102,5 +106,43 @@ export async function chat(messages, model = process.env.DEFAULT_MODEL || "googl
   }
 
   const data = await res.json().catch(() => null);
-  return data?.choices?.[0]?.message?.content ?? null;
+  return data?.choices?.[0]?.message?.content ?? data?.reply ?? null;
+}
+
+export async function generateImage(prompt, model = process.env.DEFAULT_MODEL) {
+  const token = await getToken();
+  const IMAGE_URL = process.env.SWU_IMAGE_URL || CHAT_URL; // fallback
+
+  const timeoutMs = Number(process.env.API_TIMEOUT_MS) || 60 * 1000;
+  const ac = new AbortController();
+  const tid = setTimeout(() => ac.abort(), timeoutMs);
+
+  const res = await fetch(IMAGE_URL, {
+    method: "POST",
+    headers: {
+      Authorization: `Bearer ${token}`,
+      "Content-Type": "application/json",
+      Cookie: `token=${token}`
+    },
+    body: JSON.stringify({ model, prompt, type: "image" }),
+    signal: ac.signal
+  }).finally(() => clearTimeout(tid));
+
+  if (!res.ok) {
+    const text = await res.text().catch(() => "");
+    throw new Error(`Image request failed (${res.status}) ${text}`);
+  }
+
+  const data = await res.json().catch(() => null);
+
+  // Try multiple common shapes
+  if (data == null) return null;
+
+  if (data.image) return { image: data.image, meta: data };
+  if (data.images && Array.isArray(data.images) && data.images.length) return { image: data.images[0], meta: data };
+  if (data?.choices?.[0]?.image) return { image: data.choices[0].image, meta: data };
+  if (data?.choices?.[0]?.message?.content) return { image: data.choices[0].message.content, meta: data };
+
+  // fallback: return full body as string
+  return { image: JSON.stringify(data), meta: data };
 }
