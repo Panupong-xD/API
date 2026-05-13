@@ -354,17 +354,6 @@
         Select Model
       </label>
 
-      <label>
-        Filter Models
-      </label>
-
-      <select id="model_filter">
-        <option value="all">All</option>
-        <option value="text">Text</option>
-        <option value="vision">Vision</option>
-        <option value="image">Image Generation</option>
-      </select>
-
       <select id="model"></select>
 
       <div class="checkbox">
@@ -475,62 +464,50 @@
     const API_BASE =
       "https://swu-api-267418408907.asia-southeast1.run.app";
 
-    // Models will be loaded from the server (GET /models)
-    let MODELS = [];
-    let MODEL_MAP = {};
+    const MODELS = [
 
-    const modelSel = document.getElementById("model");
-    const modelFilter = document.getElementById("model_filter");
+      "google/gemini-2.5-flash",
+      "google/gemini-3-flash-preview",
+      "google/gemini-3.1-pro-preview",
+      "google/gemini-2.5-flash-image",
+      "google/gemini-3-pro-image-preview",
 
-    function getCategory(entry) {
-      if (!entry) return "text";
-      if (entry.supportsImageGeneration) return "image";
-      if (entry.supportsVision) return "vision";
-      return "text";
-    }
+      "openai/gpt-5",
+      "openai/gpt-5.2",
+      "openai/gpt-5.4-mini",
+      "openai/gpt-5.4-nano",
 
-    function populateModelSelect() {
-      const filter = modelFilter.value || "all";
-      modelSel.innerHTML = "";
-      const list = MODELS.filter(m => {
-        if (filter === "all") return true;
-        const entry = MODEL_MAP[m];
-        const cat = getCategory(entry);
-        return (filter === "text" && cat === "text") || (filter === "vision" && cat === "vision") || (filter === "image" && cat === "image");
-      });
-      list.forEach(m => {
-        const option = document.createElement("option");
-        option.value = m;
-        option.textContent = m;
-        modelSel.appendChild(option);
-      });
-      if (list.length && !modelSel.value) modelSel.value = list[0];
-    }
+      "anthropic/claude-sonnet-4.6",
+      "anthropic/claude-opus-4.6",
 
-    modelFilter.addEventListener("change", populateModelSelect);
+      "deepseek-v4-flash",
+      "deepseek-v4-pro",
 
-    async function loadModels() {
-      try {
-        const res = await fetch(`${API_BASE}/models`);
-        const json = await res.json();
-        MODEL_MAP = json.models || json;
-        MODELS = Object.keys(MODEL_MAP || {}).sort();
-        if (!MODELS.length) throw new Error("no models returned");
-        populateModelSelect();
-      } catch (e) {
-        // fallback minimal list
-        MODELS = [
-          "google/gemini-2.5-flash",
-          "google/gemini-2.5-flash-image",
-          "google/gemini-3-pro-image-preview",
-          "openai/gpt-5"
-        ];
-        MODELS.forEach(m => MODEL_MAP[m] = MODEL_MAP[m] || {});
-        populateModelSelect();
-      }
-    }
+      "x-ai/grok-4.1-fast",
 
-    loadModels();
+      "qwen/qwen3-max-thinking"
+    ];
+
+    const modelSel =
+      document.getElementById(
+        "model"
+      );
+
+    MODELS.forEach(m=>{
+
+      const option =
+        document.createElement(
+          "option"
+        );
+
+      option.value = m;
+
+      option.textContent = m;
+
+      modelSel.appendChild(
+        option
+      );
+    });
 
     const imgInput =
       document.getElementById(

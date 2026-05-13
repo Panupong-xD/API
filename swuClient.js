@@ -145,8 +145,10 @@ export async function generateImage(prompt, model = process.env.DEFAULT_MODEL) {
     const text = await res.text().catch(() => "");
     throw new Error(`Image request failed (${res.status}) ${text}`);
   }
+
   const data = await res.json().catch(() => null);
 
+<<<<<<< HEAD
   // helper: search for image-like values in arbitrary response shapes
   function findImageInObj(obj, seen = new WeakSet()) {
     if (!obj) return null;
@@ -170,66 +172,16 @@ export async function generateImage(prompt, model = process.env.DEFAULT_MODEL) {
       }
       return null;
     }
+=======
+  // Try multiple common shapes
+  if (data == null) return null;
+>>>>>>> parent of a92cb4d (feat: Enhance image generation function with improved response handling and image extraction logic)
 
-    if (Array.isArray(obj)) {
-      for (const item of obj) {
-        const found = findImageInObj(item, seen);
-        if (found) return found;
-      }
-      return null;
-    }
-
-    if (typeof obj === "object") {
-      if (seen.has(obj)) return null;
-      seen.add(obj);
-
-      // common paths
-      if (obj.data && Array.isArray(obj.data) && obj.data.length) {
-        for (const d of obj.data) {
-          const f = findImageInObj(d, seen);
-          if (f) return f;
-        }
-      }
-      if (obj.choices && Array.isArray(obj.choices)) {
-        for (const c of obj.choices) {
-          const f = findImageInObj(c, seen);
-          if (f) return f;
-        }
-      }
-
-      for (const k of Object.keys(obj)) {
-        const val = obj[k];
-        // prefer obvious keys
-        if (["b64_json", "b64", "base64", "image", "image_url", "url", "artifact", "artifacts", "image_data", "data"].includes(k)) {
-          const found = findImageInObj(val, seen);
-          if (found) return found;
-        }
-      }
-
-      // fallback: scan all keys
-      for (const k of Object.keys(obj)) {
-        const found = findImageInObj(obj[k], seen);
-        if (found) return found;
-      }
-    }
-    return null;
-  }
-
-  if (data == null) {
-    console.error("generateImage: upstream returned empty body");
-    return null;
-  }
-
-  // quick checks for common shapes
   if (data.image) return { image: data.image, meta: data };
   if (data.images && Array.isArray(data.images) && data.images.length) return { image: data.images[0], meta: data };
   if (data?.choices?.[0]?.image) return { image: data.choices[0].image, meta: data };
   if (data?.choices?.[0]?.message?.content) return { image: data.choices[0].message.content, meta: data };
 
-  const found = findImageInObj(data);
-  if (found) return { image: found, meta: data };
-
-  // no image found — log entire response for debugging
-  console.error("generateImage: no image found in upstream response:", JSON.stringify(data).slice(0, 2000));
-  return null;
+  // fallback: return full body as string
+  return { image: JSON.stringify(data), meta: data };
 }
