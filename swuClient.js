@@ -117,19 +117,6 @@ export async function generateImage(prompt, model = process.env.DEFAULT_MODEL) {
   const ac = new AbortController();
   const tid = setTimeout(() => ac.abort(), timeoutMs);
 
-  // New payload format: use chat-style messages with modalities
-  const payload = {
-    stream: false,
-    model,
-    modalities: ["image", "text"],
-    messages: [
-      {
-        role: "user",
-        content: prompt
-      }
-    ]
-  };
-
   const res = await fetch(IMAGE_URL, {
     method: "POST",
     headers: {
@@ -137,7 +124,7 @@ export async function generateImage(prompt, model = process.env.DEFAULT_MODEL) {
       "Content-Type": "application/json",
       Cookie: `token=${token}`
     },
-    body: JSON.stringify(payload),
+    body: JSON.stringify({ model, prompt, type: "image" }),
     signal: ac.signal
   }).finally(() => clearTimeout(tid));
 
@@ -148,34 +135,8 @@ export async function generateImage(prompt, model = process.env.DEFAULT_MODEL) {
 
   const data = await res.json().catch(() => null);
 
-<<<<<<< HEAD
-  // helper: search for image-like values in arbitrary response shapes
-  function findImageInObj(obj, seen = new WeakSet()) {
-    if (!obj) return null;
-    if (typeof obj === "string") {
-      const s = obj.trim();
-      // try to parse JSON strings that may contain image fields
-      if ((s.startsWith("{") || s.startsWith("[")) && s.length > 50) {
-        try {
-          const parsed = JSON.parse(s);
-          return findImageInObj(parsed, seen);
-        } catch (e) {
-          // not JSON
-        }
-      }
-
-      if (s.startsWith("data:")) return s;
-      if (s.startsWith("http://") || s.startsWith("https://")) return s;
-      // base64-only detection (naive): sufficiently long and base64 chars
-      if (/^[A-Za-z0-9+/=\\r\\n]+$/.test(s) && s.length > 100) {
-        return `data:image/png;base64,${s.replace(/\\s+/g, "")}`;
-      }
-      return null;
-    }
-=======
   // Try multiple common shapes
   if (data == null) return null;
->>>>>>> parent of a92cb4d (feat: Enhance image generation function with improved response handling and image extraction logic)
 
   if (data.image) return { image: data.image, meta: data };
   if (data.images && Array.isArray(data.images) && data.images.length) return { image: data.images[0], meta: data };
