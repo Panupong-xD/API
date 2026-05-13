@@ -123,6 +123,17 @@ app.get("/", (req, res) => {
   });
 });
 
+/* ---------------- MODELS LIST ---------------- */
+
+app.get("/models", (req, res) => {
+  try {
+    return res.json({ success: true, models: modelRegistry });
+  } catch (err) {
+    console.error("/models error", err);
+    return res.status(500).json({ error: "internal_error" });
+  }
+});
+
 /* ---------------- VALIDATION ---------------- */
 
 const chatSchema = Joi.object({
