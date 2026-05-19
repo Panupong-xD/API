@@ -1,10 +1,6 @@
+export const DEFAULT_MODEL = "google/gemini-3-flash-preview";
+
 export const modelRegistry = {
-  "google/gemini-2.5-flash": {
-    provider: "google",
-    supportsVision: false,
-    supportsImageGeneration: false,
-    supportsStreaming: true
-  },
   "google/gemini-3-flash-preview": {
     provider: "google",
     supportsVision: false,
@@ -93,7 +89,27 @@ export const modelRegistry = {
     supportsVision: false,
     supportsImageGeneration: false,
     supportsStreaming: true
+  },
+
+  "meta-llama/llama-4-maverick": {
+    provider: "meta",
+    supportsVision: false,
+    supportsImageGeneration: false,
+    supportsStreaming: true
+  },
+
+  "z-ai/glm-5": {
+    provider: "zai",
+    supportsVision: false,
+    supportsImageGeneration: false,
+    supportsStreaming: true
   }
 };
+
+export const allowedModelIds = Object.freeze(Object.keys(modelRegistry));
+
+export function isAllowedModel(model) {
+  return Boolean(model && modelRegistry[model]);
+}
 
 export default modelRegistry;

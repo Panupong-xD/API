@@ -1,7 +1,4 @@
-import fs from "fs";
-import path from "path";
-
-const __dirname = path.resolve();
+import { DEFAULT_MODEL, isAllowedModel } from "./modelRegistry.js";
 
 const fetchFn = globalThis.fetch;
 if (!fetchFn) {
@@ -9,9 +6,18 @@ if (!fetchFn) {
 }
 
 /* swuClient.js - stateless (memory-only token cache) */
-const LOGIN_URL = process.env.SWU_LOGIN_URL || "https://swuai.swu.ac.th/api/v1/auths/ldap";
-const CHAT_URL = process.env.SWU_CHAT_URL || "https://swuai.swu.ac.th/api/chat/completions";
-const TOKEN_EXPIRE_MS = Number(process.env.TOKEN_EXPIRE_MS) || 60 * 60 * 1000; // 1 hour
+
+function loginUrl() {
+  return process.env.SWU_LOGIN_URL || "https://swuai.swu.ac.th/api/v1/auths/ldap";
+}
+
+function chatUrl() {
+  return process.env.SWU_CHAT_URL || "https://swuai.swu.ac.th/api/chat/completions";
+}
+
+function tokenExpireMs() {
+  return Number(process.env.TOKEN_EXPIRE_MS) || 60 * 60 * 1000;
+}
 
 let cachedToken = null;
 let cachedTime = 0;
@@ -22,7 +28,7 @@ async function _doLogin() {
   const password = process.env.SWU_PASSWORD;
   if (!user || !password) throw new Error("SWU credentials not set in environment");
 
-  const res = await fetch(LOGIN_URL, {
+  const res = await fetch(loginUrl(), {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ user, password }),
@@ -71,25 +77,38 @@ export async function login() {
 }
 
 export async function getToken() {
-  if (cachedToken && (Date.now() - cachedTime) < TOKEN_EXPIRE_MS) return cachedToken;
+  if (cachedToken && (Date.now() - cachedTime) < tokenExpireMs()) return cachedToken;
   return await login();
 }
 
-export async function chat(messages, model = process.env.DEFAULT_MODEL || "google/gemini-2.5-flash") {
+function resolveModel(model) {
+  if (isAllowedModel(model)) {
+    return model;
+  }
+
+  if (isAllowedModel(process.env.DEFAULT_MODEL)) {
+    return process.env.DEFAULT_MODEL;
+  }
+
+  return DEFAULT_MODEL;
+}
+
+export async function chat(messages, model = process.env.DEFAULT_MODEL || DEFAULT_MODEL) {
+  const resolvedModel = resolveModel(model);
   const token = await getToken();
 
   const timeoutMs = Number(process.env.API_TIMEOUT_MS) || 60 * 1000;
   const ac = new AbortController();
   const tid = setTimeout(() => ac.abort(), timeoutMs);
 
-  const res = await fetch(CHAT_URL, {
+  const res = await fetch(chatUrl(), {
     method: "POST",
     headers: {
       Authorization: `Bearer ${token}`,
       "Content-Type": "application/json",
       Cookie: `token=${token}`
     },
-    body: JSON.stringify({ model, messages }),
+    body: JSON.stringify({ model: resolvedModel, messages }),
     signal: ac.signal
   }).finally(() => clearTimeout(tid));
 
@@ -110,21 +129,22 @@ export async function chat(messages, model = process.env.DEFAULT_MODEL || "googl
 }
 
 export async function generateImage(prompt, model = process.env.DEFAULT_MODEL) {
+  const resolvedModel = resolveModel(model);
   const token = await getToken();
-  const IMAGE_URL = process.env.SWU_IMAGE_URL || CHAT_URL; // fallback
+  const imageUrl = process.env.SWU_IMAGE_URL || chatUrl();
 
   const timeoutMs = Number(process.env.API_TIMEOUT_MS) || 60 * 1000;
   const ac = new AbortController();
   const tid = setTimeout(() => ac.abort(), timeoutMs);
 
-  const res = await fetch(IMAGE_URL, {
+  const res = await fetch(imageUrl, {
     method: "POST",
     headers: {
       Authorization: `Bearer ${token}`,
       "Content-Type": "application/json",
       Cookie: `token=${token}`
     },
-    body: JSON.stringify({ model, prompt, type: "image" }),
+    body: JSON.stringify({ model: resolvedModel, prompt, type: "image" }),
     signal: ac.signal
   }).finally(() => clearTimeout(tid));
 
