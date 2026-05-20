@@ -25,7 +25,12 @@ export const modelRegistry = {
     supportsImageGeneration: true,
     supportsStreaming: true
   },
-
+  "google/gemini-3.5-flash": {
+  provider: "google",
+  supportsVision: false,
+  supportsImageGeneration: false,
+  supportsStreaming: true
+  },
   "openai/gpt-5": {
     provider: "openai",
     supportsVision: false,
