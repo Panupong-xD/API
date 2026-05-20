@@ -14,7 +14,7 @@ export function formatOpenAIMessage(internalMessages) {
       };
     }
 
-    return { role, content: m.text || "" };
+    return withToolCalls({ role, content: m.text || "" }, m);
   });
 
   return { messages };
@@ -31,7 +31,7 @@ export function formatGeminiMessage(internalMessages) {
       };
     }
 
-    return { role, content: m.text || "" };
+    return withToolCalls({ role, content: m.text || "" }, m);
   });
 
   return { messages };
@@ -51,7 +51,7 @@ export function formatClaudeMessage(internalMessages) {
       }
     }
 
-    return { role, content };
+    return withToolCalls({ role, content }, m);
   });
 
   return { messages };
@@ -95,6 +95,26 @@ function buildVisionContent(message) {
   }
 
   return content.length ? content : [{ type: "text", text: "" }];
+}
+
+function withToolCalls(message, internalMessage) {
+  if (!Array.isArray(internalMessage.toolCalls) || internalMessage.toolCalls.length === 0) {
+    return message;
+  }
+
+  return {
+    ...message,
+    tool_calls: internalMessage.toolCalls.map((toolCall) => ({
+      id: toolCall.id,
+      type: "function",
+      function: {
+        name: toolCall.name,
+        arguments: typeof toolCall.arguments === "string"
+          ? toolCall.arguments
+          : JSON.stringify(toolCall.arguments ?? {})
+      }
+    }))
+  };
 }
 
 export default { formatOpenAIMessage, formatGeminiMessage, formatClaudeMessage };
