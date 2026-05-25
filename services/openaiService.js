@@ -10,6 +10,7 @@ import {
   toOpenAIChatTools
 } from "../utils/toolUtils.js";
 import { chat, chatCompletion } from "./swuClient.js";
+import util from "util";
 
 export async function runOpenAICompletion({ model, internalMessages, tools = [], tool_choice: toolChoice }) {
   const upstreamMessages = formatForProvider(model, internalMessages);
@@ -122,8 +123,25 @@ function serializeReply(reply) {
   if (reply == null) {
     return "";
   }
-
-  return JSON.stringify(reply);
+  try {
+    const seen = new WeakSet();
+    return JSON.stringify(reply, (key, value) => {
+      if (typeof value === "undefined") return null;
+      if (typeof value === "function") return undefined;
+      if (value && typeof value === "object") {
+        if (seen.has(value)) return null;
+        seen.add(value);
+      }
+      return value;
+    });
+  } catch (err) {
+    console.error("serializeReply: failed to stringify reply", err, util.inspect(reply, { depth: 2 }));
+    try {
+      return String(reply);
+    } catch {
+      return "";
+    }
+  }
 }
 
 function delay(ms) {

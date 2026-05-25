@@ -8,6 +8,7 @@ import { getStreamChunkSize, isTruthy } from "../utils/config.js";
 import { handleRouteError, sendJoiError } from "../utils/errors.js";
 import { buildOpenAIInternalMessages, normalizeOpenAIChatBody } from "../utils/messageNormalizer.js";
 import { createOpenAIChatCompletion, writeOpenAIChatStream } from "../utils/openaiFormatter.js";
+import { safeJson } from "../utils/safeSend.js";
 import { startSse, writeSseError } from "../utils/streaming.js";
 
 export const chatRouter = Router();
@@ -58,7 +59,7 @@ chatRouter.post("/chat/completions", singleImageUpload, async (req, res) => {
       tool_choice: value.tool_choice
     });
 
-    return res.json(createOpenAIChatCompletion(value.model, result));
+    return safeJson(res, 200, createOpenAIChatCompletion(value.model, result));
   } catch (err) {
     return handleRouteError(req, res, err, "OpenAI chat completion failed");
   }

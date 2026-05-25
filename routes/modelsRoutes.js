@@ -5,7 +5,7 @@ import { allowedModelIds } from "../modelRegistry.js";
 export const modelsRouter = Router();
 
 modelsRouter.get("/models", (req, res) => {
-  res.json({
+  return res.status(200).json({
     object: "list",
     data: allowedModelIds.map((id) => ({
       id,

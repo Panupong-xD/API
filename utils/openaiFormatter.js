@@ -2,8 +2,7 @@ import { randomUUID } from "crypto";
 
 export function createOpenAIChatCompletion(model, result) {
   const hasToolCalls = Array.isArray(result.toolCalls) && result.toolCalls.length > 0;
-
-  return {
+  const out = {
     id: `chatcmpl-${compactUuid()}`,
     object: "chat.completion",
     created: unixNow(),
@@ -21,6 +20,8 @@ export function createOpenAIChatCompletion(model, result) {
     ],
     usage: emptyUsage()
   };
+
+  return sanitizeChatCompletion(out);
 }
 
 export function writeOpenAIChatStream(res, model, result, chunkSize) {
@@ -97,7 +98,7 @@ export function createResponsesObject(model, result) {
       }
     ];
 
-  return {
+  return sanitizeResponsesObject({
     id,
     object: "response",
     created_at: unixNow(),
@@ -106,7 +107,100 @@ export function createResponsesObject(model, result) {
     output,
     output_text: hasToolCalls ? "" : result.content ?? "",
     usage: emptyUsage()
-  };
+  });
+}
+
+
+function sanitizeResponsesObject(obj) {
+  try {
+    if (!obj || typeof obj !== "object") return obj;
+    obj.id = String(obj.id || `resp_${compactUuid()}`);
+    obj.object = "response";
+    obj.created_at = Number(obj.created_at) || unixNow();
+    obj.status = obj.status || "completed";
+    obj.model = String(obj.model || "unknown");
+    obj.output = Array.isArray(obj.output) ? obj.output : [];
+    obj.output_text = obj.output_text == null ? "" : String(obj.output_text);
+    obj.usage = normalizeUsage(obj.usage);
+    return obj;
+  } catch (err) {
+    console.error("sanitizeResponsesObject failed", err);
+    return obj;
+  }
+}
+
+function sanitizeChatCompletion(obj) {
+  try {
+    if (!obj || typeof obj !== "object") {
+      return {
+        id: `chatcmpl-${compactUuid()}`,
+        object: "chat.completion",
+        created: unixNow(),
+        model: "unknown",
+        choices: [
+          { index: 0, message: { role: "assistant", content: "" }, finish_reason: "stop" }
+        ],
+        usage: emptyUsage()
+      };
+    }
+
+    obj.id = String(obj.id || `chatcmpl-${compactUuid()}`);
+    obj.object = "chat.completion";
+    obj.created = Number(obj.created) || unixNow();
+    obj.model = String(obj.model || "unknown");
+
+    if (!Array.isArray(obj.choices) || obj.choices.length === 0) {
+      obj.choices = [{ index: 0, message: { role: "assistant", content: "" }, finish_reason: "stop" }];
+    }
+
+    obj.choices = obj.choices.map((choice, idx) => {
+      const message = choice && choice.message ? choice.message : { role: "assistant", content: "" };
+      return {
+        index: Number.isInteger(choice?.index) ? choice.index : idx,
+        message: {
+          role: message.role || "assistant",
+          content: message.content == null ? "" : message.content
+        },
+        finish_reason: choice?.finish_reason || "stop"
+      };
+    });
+
+    obj.usage = normalizeUsage(obj.usage);
+    return obj;
+  } catch (err) {
+    console.error("sanitizeChatCompletion failed", err);
+    return {
+      id: `chatcmpl-${compactUuid()}`,
+      object: "chat.completion",
+      created: unixNow(),
+      model: "unknown",
+      choices: [
+        { index: 0, message: { role: "assistant", content: "" }, finish_reason: "stop" }
+      ],
+      usage: emptyUsage()
+    };
+  }
+}
+
+function normalizeUsage(usage) {
+  try {
+    const p = Number(usage?.prompt_tokens);
+    const c = Number(usage?.completion_tokens);
+    const pt = Number.isFinite(p) && Number.isInteger(p) ? p : 0;
+    const ct = Number.isFinite(c) && Number.isInteger(c) ? c : 0;
+    const tt = Number.isFinite(Number(usage?.total_tokens)) && Number.isInteger(Number(usage?.total_tokens))
+      ? Number(usage.total_tokens)
+      : Math.max(0, pt + ct);
+
+    return {
+      prompt_tokens: pt,
+      completion_tokens: ct,
+      total_tokens: tt
+    };
+  } catch (err) {
+    console.error("normalizeUsage failed", err);
+    return emptyUsage();
+  }
 }
 
 export function writeResponsesStream(res, model, result, chunkSize) {
@@ -281,11 +375,24 @@ function writeOpenAIStreamFinish(res, id, created, model, finishReason) {
 }
 
 function writeSseData(res, payload) {
-  res.write(`data: ${JSON.stringify(payload)}\n\n`);
+  try {
+    res.write(`data: ${JSON.stringify(payload)}\n\n`);
+  } catch (err) {
+    console.error("writeSseData: failed to serialize payload", err, payload);
+    try {
+      res.write(`data: ${JSON.stringify({ error: "serialization_failed" })}\n\n`);
+    } catch (e) {
+      // last-resort: ignore
+    }
+  }
 }
 
 function writeSseEvent(res, event, payload) {
-  res.write(`event: ${event}\n`);
+  try {
+    res.write(`event: ${event}\n`);
+  } catch (err) {
+    console.error("writeSseEvent: failed to write event", err, event);
+  }
   writeSseData(res, payload);
 }
 

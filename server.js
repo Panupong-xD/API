@@ -54,7 +54,7 @@ app.use(express.urlencoded({
 }));
 
 app.get("/", (req, res) => {
-  res.json({
+  return res.status(200).json({
     status: "SWU API running",
     openai_compatible: true,
     tools_compatible: true,

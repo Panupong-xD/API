@@ -33,7 +33,7 @@ imageRouter.post("/generate-image", async (req, res) => {
       return res.status(502).json({ error: "no_image_returned" });
     }
 
-    return res.json({
+    return res.status(200).json({
       success: true,
       model: value.model,
       image,
@@ -63,7 +63,7 @@ imageRouter.post("/v1/images/generations", async (req, res) => {
       return sendError(req, res, 502, "no_image_returned", "The upstream image model did not return an image");
     }
 
-    return res.json({
+    return res.status(200).json({
       created: unixNow(),
       data: [toOpenAIImageData(image, value.response_format)]
     });

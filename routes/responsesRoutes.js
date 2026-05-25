@@ -7,6 +7,7 @@ import { getStreamChunkSize, isTruthy } from "../utils/config.js";
 import { handleRouteError, sendJoiError } from "../utils/errors.js";
 import { buildOpenAIInternalMessages, responsesInputToMessages } from "../utils/messageNormalizer.js";
 import { createResponsesObject, writeResponsesStream } from "../utils/openaiFormatter.js";
+import { safeJson } from "../utils/safeSend.js";
 import { startSse, writeSseError } from "../utils/streaming.js";
 
 export const responsesRouter = Router();
@@ -48,7 +49,7 @@ responsesRouter.post("/responses", async (req, res) => {
       tool_choice: value.tool_choice
     });
 
-    return res.json(createResponsesObject(value.model, result));
+    return safeJson(res, 200, createResponsesObject(value.model, result));
   } catch (err) {
     return handleRouteError(req, res, err, "OpenAI response failed");
   }

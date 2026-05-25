@@ -42,7 +42,7 @@ legacyChatRouter.post("/chat", singleImageUpload, async (req, res) => {
 
     const upstreamMessages = formatForProvider(model, internalMessages);
     const reply = await swuChat(upstreamMessages, model);
-    return res.json({ reply, model });
+    return res.status(200).json({ reply, model });
   } catch (err) {
     return handleRouteError(req, res, err, "Chat failed");
   }
